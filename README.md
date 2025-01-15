@@ -1,7 +1,7 @@
 # go-env
 
-![Build Status](https://github.com/Netflix/go-env/actions/workflows/build.yml/badge.svg)
-[![Go Reference](https://pkg.go.dev/badge/github.com/Netflix/go-env.svg)](https://pkg.go.dev/github.com/Netflix/go-env)
+![Build Status](https://github.com/TubbyStubby/go-env-flags/actions/workflows/build.yml/badge.svg)
+[![Go Reference](https://pkg.go.dev/badge/github.com/TubbyStubby/go-env-flags.svg)](https://pkg.go.dev/github.com/TubbyStubby/go-env-flags)
 [![NetflixOSS Lifecycle](https://img.shields.io/osslifecycle/Netflix/go-expect.svg)]()
 
 
@@ -16,7 +16,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/Netflix/go-env"
+	"github.com/TubbyStubby/go-env-flags"
 )
 
 type Environment struct {
@@ -75,7 +75,7 @@ func main() {
 
 This will initially throw an error if `IM_REQUIRED` is not set in the environment as part of the env struct validation.
 
-This error can be resolved by setting the `IM_REQUIRED` environment variable manually in the environment or by setting it in the 
+This error can be resolved by setting the `IM_REQUIRED` environment variable manually in the environment or by setting it in the
 code prior to calling `UnmarshalFromEnviron` with:
 ```go
 os.Setenv("IM_REQUIRED", "some_value")
@@ -93,8 +93,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	
-	"github.com/Netflix/go-env"
+
+	"github.com/TubbyStubby/go-env-flags"
 )
 
 type SomeData struct {
@@ -106,7 +106,7 @@ func (s *SomeData) UnmarshalEnvironmentValue(data string) error {
 	if  err := json.Unmarshal([]byte(data), &tmp); err != nil {
 		return err
 	}
-	*s = tmp 
+	*s = tmp
 	return nil
 }
 

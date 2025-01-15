@@ -35,6 +35,9 @@ const (
 	// tagKeySeparator is the key used in the struct field tag to specify a
 	// separator for slice fields
 	tagKeySeparator = "separator"
+	// tagKeyFlag is the key used in the struct field tag to specify a different
+	// name for the env flag
+	tagKeyFlag = "flag"
 )
 
 var (
@@ -358,6 +361,8 @@ type tag struct {
 	Required bool
 	// Separator is used to split the value of a slice field
 	Separator string
+	// Flag is used to provide alternative name for the env flag
+	Flag string
 }
 
 // parseTag is used in the Unmarshal function to parse the "env" field tags
@@ -378,6 +383,8 @@ func parseTag(tagString string) tag {
 			t.Required = strings.ToLower(keyData[1]) == "true"
 		case tagKeySeparator:
 			t.Separator = keyData[1]
+		case tagKeyFlag:
+			t.Flag = keyData[1]
 		default:
 			// just ignoring unsupported keys
 			continue
