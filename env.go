@@ -18,6 +18,7 @@ package env
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"reflect"
@@ -77,7 +78,7 @@ func (e ErrMissingRequiredValue) Error() string {
 //
 // If the field has a type that is unsupported, Unmarshal returns
 // ErrUnsupportedType.
-func Unmarshal(es EnvSet, v interface{}) error {
+func Unmarshal(flags *flag.FlagSet, es EnvSet, v interface{}) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return ErrInvalidValue
@@ -95,7 +96,7 @@ func Unmarshal(es EnvSet, v interface{}) error {
 			if !valueField.Addr().CanInterface() {
 				continue
 			}
-			if err := Unmarshal(es, valueField.Addr().Interface()); err != nil {
+			if err := Unmarshal(flags, es, valueField.Addr().Interface()); err != nil {
 				return err
 			}
 		}
@@ -111,15 +112,24 @@ func Unmarshal(es EnvSet, v interface{}) error {
 		}
 
 		envTag := parseTag(tag)
+		flagName := envTag.Flag
+		if flagName == "" {
+			flagName = toFlagName(envTag.Keys[0])
+		}
 
-		var (
-			envValue string
-			ok       bool
-		)
-		for _, envKey := range envTag.Keys {
-			envValue, ok = es[envKey]
-			if ok {
-				break
+		var envValue string
+		var ok bool
+
+		f := flags.Lookup(flagName)
+		if f != nil && f.Value.String() != "" {
+			envValue = f.Value.String()
+			ok = true
+		} else {
+			for _, envKey := range envTag.Keys {
+				envValue, ok = es[envKey]
+				if ok {
+					break
+				}
 			}
 		}
 
@@ -259,13 +269,24 @@ func set(t reflect.Type, f reflect.Value, value, sliceSeparator string) error {
 //
 // If the field has a type that is unsupported, UnmarshalFromEnviron returns
 // ErrUnsupportedType.
-func UnmarshalFromEnviron(v interface{}) (EnvSet, error) {
-	es, err := EnvironToEnvSet(os.Environ())
+func UnmarshalFromEnviron(v interface{}) (*flag.FlagSet, EnvSet, error) {
+	flags, err := RegisterFlags(v)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return es, Unmarshal(es, v)
+	filteredArgs := filterUndefined(flags, os.Args[1:])
+	err = flags.Parse(filteredArgs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	es, err := EnvironToEnvSet(os.Environ())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return flags, es, Unmarshal(flags, es, v)
 }
 
 // Marshal returns an EnvSet of v. If v is nil or not a pointer, Marshal returns
