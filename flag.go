@@ -65,19 +65,14 @@ func toFlagName(s string) string {
 	nameSlice := make([]rune, 0, len(s)+3)
 
 	var prev rune
-	for i, r := range s {
-		if i == 0 {
-			nameSlice = append(nameSlice, r)
-		} else if r >= 'A' && r <= 'Z' &&
+	for _, r := range s {
+		if r >= 'A' && r <= 'Z' &&
 			prev >= 'a' && prev <= 'z' {
 			nameSlice = append(nameSlice, '-', r)
 		} else if !(r >= 'A' && r <= 'Z') &&
 			!(r >= 'a' && r <= 'z') &&
 			!(r >= '0' && r <= '9') {
 			nameSlice = append(nameSlice, '-')
-		} else if r >= '0' && r <= '9' &&
-			!(prev >= '0' && prev <= '9') {
-			nameSlice = append(nameSlice, '-', r)
 		} else {
 			nameSlice = append(nameSlice, r)
 		}
@@ -87,41 +82,47 @@ func toFlagName(s string) string {
 	return strings.ToLower(string(nameSlice))
 }
 
-func filterUndefined(flags *flag.FlagSet, args []string) []string {
+func filterUndefinedAndDups(flags *flag.FlagSet, args []string) []string {
 	filteredArgs := make([]string, 0, len(args))
+	seen := map[string]bool{}
 	for i := 0; i < len(args); {
-		s := args[i]
+		arg := args[i]
 
-		s2 := strings.SplitN(s, "=", 2)
-		if s2[0][0] != '-' {
+		splitArg := strings.SplitN(arg, "=", 2)
+		if splitArg[0][0] != '-' {
+			i++
 			continue
 		}
 
-		var f string
-		if s2[0][1] == '-' {
-			f = s2[0][2:]
+		var flagName string
+		if splitArg[0][1] == '-' {
+			flagName = splitArg[0][2:]
 		} else {
-			f = s2[0][1:]
+			flagName = splitArg[0][1:]
 		}
 
-		exists := flags.Lookup(f) != nil
-		var nextS string
+		exists := flags.Lookup(flagName) != nil
+		var nextArg string
 		if i < len(args)-1 {
-			nextS = args[i+1]
+			nextArg = args[i+1]
 		}
 
-		if len(s2) == 1 {
-			if nextS == "" || nextS[0] == '-' {
-				i += 1
-			} else if exists {
-				filteredArgs = append(filteredArgs, s, nextS)
+		if len(splitArg) == 1 {
+			if nextArg != "" {
+				if ok := seen[flagName]; exists && !ok {
+					seen[flagName] = true
+					filteredArgs = append(filteredArgs, arg, nextArg)
+				}
 				i += 2
+			} else {
+				i++
 			}
 		} else {
-			if exists {
-				filteredArgs = append(filteredArgs, s)
+			if ok := seen[flagName]; exists && !ok {
+				seen[flagName] = true
+				filteredArgs = append(filteredArgs, arg)
 			}
-			i += 1
+			i++
 		}
 	}
 	return filteredArgs

@@ -275,7 +275,7 @@ func UnmarshalFromEnviron(v interface{}) (*flag.FlagSet, EnvSet, error) {
 		return nil, nil, err
 	}
 
-	filteredArgs := filterUndefined(flags, os.Args[1:])
+	filteredArgs := filterUndefinedAndDups(flags, os.Args[1:])
 	err = flags.Parse(filteredArgs)
 	if err != nil {
 		return nil, nil, err
