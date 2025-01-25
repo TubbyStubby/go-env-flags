@@ -20,7 +20,7 @@ func RegisterFlags(v interface{}) (*flag.FlagSet, error) {
 		return nil, ErrInvalidValue
 	}
 
-	flags := flag.NewFlagSet(flagSetName, flag.PanicOnError)
+	flags := flag.NewFlagSet(flagSetName, flag.ExitOnError)
 
 	t := rv.Type()
 
