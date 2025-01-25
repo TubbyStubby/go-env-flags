@@ -39,6 +39,9 @@ const (
 	// tagKeyFlag is the key used in the struct field tag to specify a different
 	// name for the env flag
 	tagKeyFlag = "flag"
+	// tagKeyDesc is the key used in the struct field tag to specify a description
+	// note: this only comes with flag help
+	tagKeyDesc = "desc"
 )
 
 var (
@@ -375,7 +378,7 @@ func Marshal(v interface{}) (EnvSet, error) {
 			// Skip keys with '=', as they represent tag options and not environment variable names.
 			if strings.Contains(envKey, "=") {
 				switch strings.ToLower(strings.SplitN(envKey, "=", 2)[0]) {
-				case "separator", "required", "default":
+				case "separator", "required", "default", "flag", "desc":
 					continue
 				}
 			}
@@ -398,6 +401,8 @@ type tag struct {
 	Separator string
 	// Flag is used to provide alternative name for the env flag
 	Flag string
+	// Desc is used to provide a description for the field
+	Desc string
 }
 
 // parseTag is used in the Unmarshal function to parse the "env" field tags
@@ -420,6 +425,8 @@ func parseTag(tagString string) tag {
 			t.Separator = keyData[1]
 		case tagKeyFlag:
 			t.Flag = keyData[1]
+		case tagKeyDesc:
+			t.Desc = keyData[1]
 		default:
 			// just ignoring unsupported keys
 			continue

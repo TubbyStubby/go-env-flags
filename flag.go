@@ -2,6 +2,7 @@ package env
 
 import (
 	"flag"
+	"fmt"
 	"reflect"
 	"strings"
 )
@@ -52,19 +53,42 @@ func registerStructFlags(flags *flag.FlagSet, t reflect.Type, rv reflect.Value) 
 
 		envTag := parseTag(tag)
 		flagName := envTag.Flag
+		description := generateDescription(envTag)
 
 		if flagName != "" {
-			flags.String(flagName, envTag.Default, "")
+			flags.String(flagName, envTag.Default, description)
 		}
 
 		for _, envKeyNames := range envTag.Keys {
 			flagName = toFlagName(envKeyNames)
 			if flags.Lookup(flagName) == nil {
-				flags.String(flagName, envTag.Default, "")
+				flags.String(flagName, envTag.Default, description)
 			}
 		}
 	}
 	return nil
+}
+
+func generateDescription(t tag) string {
+	var parts []string
+
+	if t.Desc != "" {
+		parts = append(parts, t.Desc)
+	}
+
+	if len(t.Keys) > 0 {
+		parts = append(parts, fmt.Sprintf("Environment: %s", strings.Join(t.Keys, ", ")))
+	}
+
+	if t.Default != "" {
+		parts = append(parts, fmt.Sprintf("Default: %s", t.Default))
+	}
+
+	if t.Required {
+		parts = append(parts, "Required: true")
+	}
+
+	return strings.Join(parts, ". ")
 }
 
 func toFlagName(s string) string {
@@ -108,7 +132,7 @@ func filterUndefinedAndDups(flags *flag.FlagSet, args []string) []string {
 			flagName = splitArg[0][1:]
 		}
 
-		exists := flags.Lookup(flagName) != nil
+		exists := flags.Lookup(flagName) != nil || flagName == "help" || flagName == "h"
 		var nextArg string
 		if i < len(args)-1 {
 			nextArg = args[i+1]
