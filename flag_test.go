@@ -1,6 +1,7 @@
 package env
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -10,13 +11,13 @@ func TestFlagUnmarshal(t *testing.T) {
 	var (
 		environ = map[string]string{}
 		args    = []string{
-			"-home", "/home/test",
-			"-workspace", "/mnt/builds/slave/workspace/test",
+			"-home=/home/test",
+			"-workspace=/mnt/builds/slave/workspace/test",
 			"-extra", "extra",
 			"-int", "1",
 			"-uint", "4294967295",
 			"-float32", "2.3",
-			"-float64", "4.5",
+			"-float64=4.5",
 			"-bool", "true",
 			"-npm-config-cache", "first",
 			"-npm-config-cache", "second",
@@ -142,3 +143,147 @@ func TestFlagUnmarshalPointer(t *testing.T) {
 		t.Errorf("Expected field value to be '%v' but got '%s'", nil, *validStruct.PointerMissing)
 	}
 }
+
+// TODO: add support for custom unmarshal
+
+func TestFlagUnmarshalSlice(t *testing.T) {
+	t.Parallel()
+	var (
+		environ = map[string]string{}
+		args    = []string{
+			"-string", "separate|values",
+			"-int", "1|2",
+			"-int64", "3|4",
+			"-duration", "60s|70h",
+			"-bool", "true|false",
+			"-kv=k1=v1|k2=v2",
+			"-separator", "1&2", // struct has `separator=&`
+		}
+		iterValStruct IterValuesStruct
+	)
+
+	flags, err := RegisterFlags(&iterValStruct)
+	if err != nil {
+		t.Errorf("Expected no error while register but got '%s'", err)
+	}
+
+	filteredArgs := filterUndefinedAndDups(flags, args)
+	if err := flags.Parse(filteredArgs); err != nil {
+		t.Errorf("Expected flag set to parse filtered args but got '%s'", err)
+	}
+
+	if err := Unmarshal(flags, environ, &iterValStruct); err != nil {
+		t.Errorf("Expected no error but got '%s'", err)
+	}
+
+	testCases := [][]interface{}{
+		{iterValStruct.StringSlice, []string{"separate", "values"}},
+		{iterValStruct.IntSlice, []int{1, 2}},
+		{iterValStruct.Int64Slice, []int64{3, 4}},
+		{iterValStruct.DurationSlice, []time.Duration{time.Second * 60, time.Hour * 70}},
+		{iterValStruct.BoolSlice, []bool{true, false}},
+		{iterValStruct.KVStringSlice, []string{"k1=v1", "k2=v2"}},
+		{iterValStruct.WithSeparator, []int{1, 2}},
+	}
+	for _, testCase := range testCases {
+		if !reflect.DeepEqual(testCase[0], testCase[1]) {
+			t.Errorf("Expected field value to be '%v' but got '%v'", testCase[1], testCase[0])
+		}
+	}
+}
+
+func TestFlagUnmarshalDefaultValues(t *testing.T) {
+	t.Parallel()
+	var (
+		environ            = map[string]string{}
+		args               = []string{"-present", "youFoundMe"}
+		defaultValueStruct DefaultValueStruct
+	)
+
+	flags, err := RegisterFlags(&defaultValueStruct)
+	if err != nil {
+		t.Errorf("Expected no error while register but got '%s'", err)
+	}
+
+	filteredArgs := filterUndefinedAndDups(flags, args)
+	if err := flags.Parse(filteredArgs); err != nil {
+		t.Errorf("Expected flag set to parse filtered args but got '%s'", err)
+	}
+
+	if err := Unmarshal(flags, environ, &defaultValueStruct); err != nil {
+		t.Errorf("Expected no error but got '%s'", err)
+	}
+
+	testCases := [][]interface{}{
+		{defaultValueStruct.DefaultInt, 7},
+		{defaultValueStruct.DefaultUint, uint(4294967295)},
+		{defaultValueStruct.DefaultFloat32, float32(8.9)},
+		{defaultValueStruct.DefaultFloat64, 10.11},
+		{defaultValueStruct.DefaultBool, true},
+		{defaultValueStruct.DefaultString, "found"},
+		{defaultValueStruct.DefaultKeyValueString, "key=value"},
+		{defaultValueStruct.DefaultDuration, 5 * time.Second},
+		{defaultValueStruct.DefaultStringSlice, []string{"separate", "values"}},
+		{defaultValueStruct.DefaultSliceWithSeparator, []string{"separate", "values"}},
+		{defaultValueStruct.DefaultRequiredSlice, []string{"other", "things"}},
+		{defaultValueStruct.DefaultWithOptionsMissing, "present"},
+		{defaultValueStruct.DefaultWithOptionsPresent, "youFoundMe"},
+	}
+	for _, testCase := range testCases {
+		if !reflect.DeepEqual(testCase[0], testCase[1]) {
+			t.Errorf("Expected field value to be '%v' but got '%v'", testCase[1], testCase[0])
+		}
+	}
+}
+
+func TestFlagUnmarshalRequiredValues(t *testing.T) {
+	t.Parallel()
+	var (
+		environ              = make(map[string]string)
+		requiredValuesStruct RequiredValueStruct
+	)
+	flags, err := RegisterFlags(&requiredValuesStruct)
+	if err != nil {
+		t.Errorf("Expected no error while register but got '%s'", err)
+	}
+
+	// Try missing REQUIRED_VAL and REQUIRED_VAL_MORE
+	err = Unmarshal(flags, environ, &requiredValuesStruct)
+	if err == nil {
+		t.Errorf("Expected error 'ErrMissingRequiredValue' but got '%s'", err)
+	}
+	errMissing := ErrMissingRequiredValue{Value: "REQUIRED_VAL"}
+	if err.Error() != errMissing.Error() {
+		t.Errorf("Expected error 'ErrMissingRequiredValue' but got '%s'", err)
+	}
+
+	// Fill REQUIRED_VAL and retry REQUIRED_VAL_MORE
+	args := []string{"-required-val", "required"}
+	if err := flags.Parse(args); err != nil {
+		t.Errorf("Expected flag set to parse filtered args but got '%s'", err)
+	}
+	err = Unmarshal(flags, environ, &requiredValuesStruct)
+	if err == nil {
+		t.Errorf("Expected error 'ErrMissingRequiredValue' but got '%s'", err)
+	}
+	errMissing = ErrMissingRequiredValue{Value: "REQUIRED_VAL_MORE"}
+	if err.Error() != errMissing.Error() {
+		t.Errorf("Expected error 'ErrMissingRequiredValue' but got '%s'", err)
+	}
+
+	args = []string{"-required-val-more", "required"}
+	if err := flags.Parse(args); err != nil {
+		t.Errorf("Expected flag set to parse filtered args but got '%s'", err)
+	}
+	if err = Unmarshal(flags, environ, &requiredValuesStruct); err != nil {
+		t.Errorf("Expected no error but got '%s'", err)
+	}
+	if requiredValuesStruct.Required != "required" {
+		t.Errorf("Expected field value to be '%s' but got '%s'", "required", requiredValuesStruct.Required)
+	}
+	if requiredValuesStruct.RequiredWithDefault != "myValue" {
+		t.Errorf("Expected field value to be '%s' but got '%s'", "myValue", requiredValuesStruct.RequiredWithDefault)
+	}
+}
+
+// TODO: do we need marshal for flags?

@@ -52,11 +52,17 @@ func registerStructFlags(flags *flag.FlagSet, t reflect.Type, rv reflect.Value) 
 
 		envTag := parseTag(tag)
 		flagName := envTag.Flag
-		if flagName == "" {
-			flagName = toFlagName(envTag.Keys[0])
+
+		if flagName != "" {
+			flags.String(flagName, envTag.Default, "")
 		}
 
-		flags.String(flagName, envTag.Default, "")
+		for _, envKeyNames := range envTag.Keys {
+			flagName = toFlagName(envKeyNames)
+			if flags.Lookup(flagName) == nil {
+				flags.String(flagName, envTag.Default, "")
+			}
+		}
 	}
 	return nil
 }

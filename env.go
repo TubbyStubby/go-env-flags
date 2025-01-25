@@ -112,20 +112,33 @@ func Unmarshal(flags *flag.FlagSet, es EnvSet, v interface{}) error {
 		}
 
 		envTag := parseTag(tag)
-		flagName := envTag.Flag
-		if flagName == "" {
-			flagName = toFlagName(envTag.Keys[0])
-		}
 
 		var envValue string
 		var ok bool
 
-		fSet := isFlagSet(flags, flagName)
-		if fSet {
-			f := flags.Lookup(flagName)
-			envValue = f.Value.String()
-			ok = true
-		} else {
+		// check if any flags are set, either the flag tag or the key flags
+		flagName := envTag.Flag
+		if flagName != "" {
+			ok = isFlagSet(flags, flagName)
+			if ok {
+				f := flags.Lookup(flagName)
+				envValue = f.Value.String()
+			}
+		}
+		if !ok {
+			for _, envKey := range envTag.Keys {
+				flagName = toFlagName(envKey)
+				ok = isFlagSet(flags, flagName)
+				if ok {
+					f := flags.Lookup(flagName)
+					envValue = f.Value.String()
+					break
+				}
+			}
+		}
+
+		// if flag not set then check the env vars
+		if !ok {
 			for _, envKey := range envTag.Keys {
 				envValue, ok = es[envKey]
 				if ok {
