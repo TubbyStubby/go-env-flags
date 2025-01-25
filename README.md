@@ -1,143 +1,152 @@
-# go-env
+# go-env-flags
 
 ![Build Status](https://github.com/TubbyStubby/go-env-flags/actions/workflows/build.yml/badge.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/TubbyStubby/go-env-flags.svg)](https://pkg.go.dev/github.com/TubbyStubby/go-env-flags)
-[![NetflixOSS Lifecycle](https://img.shields.io/osslifecycle/Netflix/go-expect.svg)]()
 
 
-Package env provides an `env` struct field tag to marshal and unmarshal environment variables.
+## Install
+
+```sh
+got get github.com/TubbyStubby/go-env-flags
+```
 
 ## Usage
 
+Package env provides an `env` struct field tag to marshal and unmarshal environment variables and command line flags.
+
+Values can be provided via environment variables or command line flags. Flags take precedence over environment variables.
+
 ```go
-package main
-
-import (
-	"log"
-	"time"
-
-	"github.com/TubbyStubby/go-env-flags"
-)
-
 type Environment struct {
+	// Creates flag -home
 	Home string `env:"HOME"`
 
 	Jenkins struct {
-		BuildId     *string `env:"BUILD_ID"`
-		BuildNumber int     `env:"BUILD_NUMBER"`
-		Ci          bool    `env:"CI"`
+		// Creates flag -build-id
+		BuildId *string `env:"BUILD_ID"`
+
+		// Creates flag -build-number
+		BuildNumber int `env:"BUILD_NUMBER"`
+
+		// Creates flag -ci
+		Ci bool `env:"CI"`
 	}
 
 	Node struct {
+		// Multiple env vars mapping to same field
+		// Creates flag -npm-config-cache
 		ConfigCache *string `env:"npm_config_cache,NPM_CONFIG_CACHE"`
 	}
 
-	Extras env.EnvSet
+	// Custom flag name -my-flag takes precedence over env generated flag name
+	CustomFlag string `env:"SOME_ENV,flag=my-flag"`
 
 	Duration      time.Duration `env:"TYPE_DURATION"`
 	DefaultValue  string        `env:"MISSING_VAR,default=default_value"`
 	RequiredValue string        `env:"IM_REQUIRED,required=true"`
-	ArrayValue    []string      `env:"ARRAY_VALUE,default=value1|value2|value3"`
+	ArrayValue    []string      `env:"ARRAY_VALUE,separator=|,default=value1|value2|value3"`
 }
 
 func main() {
 	var environment Environment
-	es, err := env.UnmarshalFromEnviron(&environment)
+
+	// Will result in an error if `IM_REQUIRED` is not set in the environment or
+	// via flag `-im-required`.
+	flags, es, err := env.UnmarshalFromEnviron(&environment)
 	if err != nil {
 		log.Fatal(err)
 	}
-	// Remaining environment variables.
-	environment.Extras = es
-
-	// ...
-
-	es, err = env.Marshal(&environment)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	home := "/tmp/edgarl"
-	cs := env.ChangeSet{
-		"HOME":         &home,
-		"BUILD_ID":     nil,
-		"BUILD_NUMBER": nil,
-	}
-	es.Apply(cs)
-
-	environment = Environment{}
-	if err = env.Unmarshal(es, &environment); err != nil {
-		log.Fatal(err)
-	}
-
-	environment.Extras = es
 }
 ```
 
-This will initially throw an error if `IM_REQUIRED` is not set in the environment as part of the env struct validation.
+## Auto Flag Name Generation
 
-This error can be resolved by setting the `IM_REQUIRED` environment variable manually in the environment or by setting it in the
-code prior to calling `UnmarshalFromEnviron` with:
+Flag names are automatically generated from environment variable names using the following rules:
+
+1. All characters are converted to lowercase
+2. Non alphanumeric characters are converted to hyphens (-)
+3. When transitioning from lowercase to uppercase in the original env name, a hyphen is inserted
+
+Examples:
+
 ```go
-os.Setenv("IM_REQUIRED", "some_value")
+// Environment Key -> Flag Name
+"HOME"              -> "-home"
+"BUILD_ID"          -> "-build-id"
+"NPM_CONFIG_CACHE"  -> "-npm-config-cache"
+"myEnvVar"          -> "-my-env-var"
+"API_URLv2"         -> "-api-urlv2"
+```
+
+You can provide custom flag name using the `flag` tag option:
+
+```go
+type Config struct {
+    // Creates flag -custom-name
+    Value string `env:"MY_ENV_VAR,flag=custom-name"`
+}
+```
+
+## Multiple Environment Variables and Flags
+
+The package supports mapping multiple environment variables to a single field. The first environment variable or flag with a value is used.
+
+### Priority
+
+1. Command line flags take precedence over environment variables
+2. For multiple environment variables, the first one found with a value is used
+3. If no environment variable has a value, the default value is used (if specified)
+
+### Examples:
+
+```go
+type Config struct {
+    Cache string `env:"npm_config_cache,NPM_CONFIG_CACHE,flag=npm-cache"`
+}
+```
+
+### Resolution Order:
+
+For the above example:
+
+1. `-npm-cache` custom flag value (if provided)
+2. `-npm-config-cache` auto generated flag value (if provided)
+3. `npm_config_cache` environment variable (if set)
+4. `NPM_CONFIG_CACHE` environment variable (if set)
+5. Default value (if specified)
+
+## Flag Descriptions
+
+You can add descriptions to flags that appear in the help output using the `desc` tag option.
+Descriptions include information about environment variables, default values, and whether the field is required.
+
+### Basic Description
+
+```go
+type Config struct {
+    // Basic description
+    Port int `env:"PORT,desc=The port number for the server"`
+
+    // Description with default value
+    Host string `env:"HOST,default=localhost,desc=The host address to bind to"`
+
+    // Required field with description
+    APIKey string `env:"API_KEY,required=true,desc=API key for authentication"`
+}
+```
+
+Help output:
+```
+  -port
+        The port number for the server. Environment: PORT
+  -host
+        The host address to bind to. Environment: HOST. Default: localhost
+  -api-key
+        API key for authentication. Environment: API_KEY. Required: true
 ```
 
 ## Custom Marshaler/Unmarshaler
 
-There is limited support for dictating how a field should be marshaled or unmarshaled. The following example
-shows how you could marshal/unmarshal from JSON
+NOTE: this is only available for environment variables.
 
-```go
-package main
-
-import (
-	"encoding/json"
-	"fmt"
-	"log"
-
-	"github.com/TubbyStubby/go-env-flags"
-)
-
-type SomeData struct {
-    SomeField int `json:"someField"`
-}
-
-func (s *SomeData) UnmarshalEnvironmentValue(data string) error {
-    var tmp SomeData
-	if  err := json.Unmarshal([]byte(data), &tmp); err != nil {
-		return err
-	}
-	*s = tmp
-	return nil
-}
-
-func (s SomeData) MarshalEnvironmentValue() (string, error) {
-	bytes, err := json.Marshal(s)
-	if err != nil {
-		return "", err
-	}
-	return string(bytes), nil
-}
-
-type Config struct {
-    SomeData *SomeData `env:"SOME_DATA"`
-}
-
-func main() {
-	var cfg Config
-	if _, err := env.UnmarshalFromEnviron(&cfg); err != nil {
-		log.Fatal(err)
-	}
-
-    if cfg.SomeData != nil && cfg.SomeData.SomeField == 42 {
-        fmt.Println("Got 42!")
-    } else {
-        fmt.Printf("Got nil or some other value: %v\n", cfg.SomeData)
-    }
-
-    es, err := env.Marshal(&cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-    fmt.Printf("Got the following: %+v\n", es)
-}
-```
+[Documentation can be found on upstream.](https://github.com/Netflix/go-env/tree/6b7f89893152c6fd09ac70c4bc7d7d7ed7df5aba?tab=readme-ov-file#custom-marshalerunmarshaler)
