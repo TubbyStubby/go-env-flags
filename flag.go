@@ -88,14 +88,15 @@ func filterUndefinedAndDups(flags *flag.FlagSet, args []string) []string {
 	for i := 0; i < len(args); {
 		arg := args[i]
 
-		splitArg := strings.SplitN(arg, "=", 2)
-		if splitArg[0][0] != '-' {
+		if len(arg) == 0 || arg[0] != '-' {
 			i++
 			continue
 		}
 
+		splitArg := strings.SplitN(arg, "=", 2)
+
 		var flagName string
-		if splitArg[0][1] == '-' {
+		if strings.HasPrefix(splitArg[0], "--") {
 			flagName = splitArg[0][2:]
 		} else {
 			flagName = splitArg[0][1:]
@@ -108,15 +109,11 @@ func filterUndefinedAndDups(flags *flag.FlagSet, args []string) []string {
 		}
 
 		if len(splitArg) == 1 {
-			if nextArg != "" {
-				if ok := seen[flagName]; exists && !ok {
-					seen[flagName] = true
-					filteredArgs = append(filteredArgs, arg, nextArg)
-				}
-				i += 2
-			} else {
-				i++
+			if ok := seen[flagName]; exists && !ok {
+				seen[flagName] = true
+				filteredArgs = append(filteredArgs, arg, nextArg)
 			}
+			i += 2
 		} else {
 			if ok := seen[flagName]; exists && !ok {
 				seen[flagName] = true
@@ -126,4 +123,14 @@ func filterUndefinedAndDups(flags *flag.FlagSet, args []string) []string {
 		}
 	}
 	return filteredArgs
+}
+
+func isFlagSet(flags *flag.FlagSet, name string) bool {
+	fSet := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			fSet = true
+		}
+	})
+	return fSet
 }

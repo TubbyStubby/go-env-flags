@@ -120,8 +120,9 @@ func Unmarshal(flags *flag.FlagSet, es EnvSet, v interface{}) error {
 		var envValue string
 		var ok bool
 
-		f := flags.Lookup(flagName)
-		if f != nil && f.Value.String() != "" {
+		fSet := isFlagSet(flags, flagName)
+		if fSet {
+			f := flags.Lookup(flagName)
 			envValue = f.Value.String()
 			ok = true
 		} else {

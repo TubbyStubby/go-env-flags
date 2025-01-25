@@ -82,3 +82,63 @@ func TestFlagUnmarshal(t *testing.T) {
 		t.Errorf("Expected field value to be '%s' but got '%s'", "5s", validStruct.Duration)
 	}
 }
+
+func TestFlagUnmarshalPointer(t *testing.T) {
+	t.Parallel()
+	var (
+		environ = map[string]string{}
+		args    = []string{
+			"-pointer-string", "",
+			"-pointer-int", "1",
+			"-pointer-uint", "4294967295",
+			"-pointer-pointer-string", "",
+		}
+		validStruct ValidStruct
+	)
+
+	flags, err := RegisterFlags(&validStruct)
+	if err != nil {
+		t.Errorf("Expected no error while register but got '%s'", err)
+	}
+
+	filteredArgs := filterUndefinedAndDups(flags, args)
+	if err := flags.Parse(filteredArgs); err != nil {
+		t.Errorf("Expected flag set to parse filtered args but got '%s'", err)
+	}
+
+	if err := Unmarshal(flags, environ, &validStruct); err != nil {
+		t.Errorf("Expected no error but got '%s'", err)
+	}
+
+	if validStruct.PointerString == nil {
+		t.Errorf("Expected field value to be '%s' but got '%v'", "", nil)
+	} else if *validStruct.PointerString != "" {
+		t.Errorf("Expected field value to be '%s' but got '%s'", "", *validStruct.PointerString)
+	}
+
+	if validStruct.PointerInt == nil {
+		t.Errorf("Expected field value to be '%d' but got '%v'", 1, nil)
+	} else if *validStruct.PointerInt != 1 {
+		t.Errorf("Expected field value to be '%d' but got '%d'", 1, *validStruct.PointerInt)
+	}
+
+	if validStruct.PointerUint == nil {
+		t.Errorf("Expected field value to be '%d' but got '%v'", 4294967295, nil)
+	} else if *validStruct.PointerUint != 4294967295 {
+		t.Errorf("Expected field value to be '%d' but got '%d'", 4294967295, *validStruct.PointerUint)
+	}
+
+	if validStruct.PointerPointerString == nil {
+		t.Errorf("Expected field value to be '%s' but got '%v'", "", nil)
+	} else {
+		if *validStruct.PointerPointerString == nil {
+			t.Errorf("Expected field value to be '%s' but got '%v'", "", nil)
+		} else if **validStruct.PointerPointerString != "" {
+			t.Errorf("Expected field value to be '%s' but got '%s'", "", **validStruct.PointerPointerString)
+		}
+	}
+
+	if validStruct.PointerMissing != nil {
+		t.Errorf("Expected field value to be '%v' but got '%s'", nil, *validStruct.PointerMissing)
+	}
+}
