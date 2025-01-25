@@ -7,7 +7,7 @@
 ## Install
 
 ```sh
-got get github.com/TubbyStubby/go-env-flags
+go get github.com/TubbyStubby/go-env-flags
 ```
 
 ## Usage
