@@ -1,4 +1,5 @@
 // Copyright 2018 Netflix, Inc.
+// Copyright 2025 TubbyStubby.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +18,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"flag"
 	"os"
 	"reflect"
 	"testing"
@@ -159,6 +161,8 @@ type IterValuesStruct struct {
 	WithSeparator []int           `env:"SEPARATOR,separator=&"`
 }
 
+const testEnvFlagSetName = "test-env-flags"
+
 func TestUnmarshal(t *testing.T) {
 	t.Parallel()
 	var (
@@ -176,9 +180,10 @@ func TestUnmarshal(t *testing.T) {
 			"TYPE_DURATION":    "5s",
 		}
 		validStruct ValidStruct
+		flags       = flag.NewFlagSet(testEnvFlagSetName, flag.ExitOnError)
 	)
 
-	if err := Unmarshal(environ, &validStruct); err != nil {
+	if err := Unmarshal(flags, environ, &validStruct); err != nil {
 		t.Errorf("Expected no error but got '%s'", err)
 	}
 
@@ -247,9 +252,10 @@ func TestUnmarshalPointer(t *testing.T) {
 			"POINTER_POINTER_STRING": "",
 		}
 		validStruct ValidStruct
+		flags       = flag.NewFlagSet(testEnvFlagSetName, flag.ExitOnError)
 	)
 
-	if err := Unmarshal(environ, &validStruct); err != nil {
+	if err := Unmarshal(flags, environ, &validStruct); err != nil {
 		t.Errorf("Expected no error but got '%s'", err)
 	}
 
@@ -296,9 +302,10 @@ func TestCustomUnmarshal(t *testing.T) {
 			"POINTER_JSON_DATA":     `{ "someField": 43 }`,
 		}
 		validStruct ValidStruct
+		flags       = flag.NewFlagSet(testEnvFlagSetName, flag.ExitOnError)
 	)
 
-	if err := Unmarshal(environ, &validStruct); err != nil {
+	if err := Unmarshal(flags, environ, &validStruct); err != nil {
 		t.Errorf("Expected no error but got '%s'", err)
 	}
 
@@ -322,14 +329,15 @@ func TestUnmarshalInvalid(t *testing.T) {
 	var (
 		environ     = make(map[string]string)
 		validStruct ValidStruct
+		flags       = flag.NewFlagSet(testEnvFlagSetName, flag.ExitOnError)
 	)
 
-	if err := Unmarshal(environ, validStruct); !errors.Is(err, ErrInvalidValue) {
+	if err := Unmarshal(flags, environ, validStruct); !errors.Is(err, ErrInvalidValue) {
 		t.Errorf("Expected error 'ErrInvalidValue' but got '%s'", err)
 	}
 
 	ptr := &validStruct
-	if err := Unmarshal(environ, &ptr); !errors.Is(err, ErrInvalidValue) {
+	if err := Unmarshal(flags, environ, &ptr); !errors.Is(err, ErrInvalidValue) {
 		t.Errorf("Expected error 'ErrInvalidValue' but got '%s'", err)
 	}
 }
@@ -339,9 +347,10 @@ func TestUnmarshalUnsupported(t *testing.T) {
 	var (
 		environ           = map[string]string{"TIMESTAMP": "2016-07-15T12:00:00.000Z"}
 		unsupportedStruct UnsupportedStruct
+		flags             = flag.NewFlagSet(testEnvFlagSetName, flag.ExitOnError)
 	)
 
-	if err := Unmarshal(environ, &unsupportedStruct); !errors.Is(err, ErrUnsupportedType) {
+	if err := Unmarshal(flags, environ, &unsupportedStruct); !errors.Is(err, ErrUnsupportedType) {
 		t.Errorf("Expected error 'ErrUnsupportedType' but got '%s'", err)
 	}
 }
@@ -358,7 +367,7 @@ func TestUnmarshalFromEnviron(t *testing.T) {
 	home := es["HOME"]
 
 	var validStruct ValidStruct
-	es, err = UnmarshalFromEnviron(&validStruct)
+	_, es, err = UnmarshalFromEnviron(&validStruct)
 	if err != nil {
 		t.Errorf("Expected no error but got '%s'", err)
 	}
@@ -377,9 +386,10 @@ func TestUnmarshalUnexported(t *testing.T) {
 	var (
 		environ          = map[string]string{"HOME": "/home/edgarl"}
 		unexportedStruct UnexportedStruct
+		flags            = flag.NewFlagSet(testEnvFlagSetName, flag.ExitOnError)
 	)
 
-	if err := Unmarshal(environ, &unexportedStruct); !errors.Is(err, ErrUnexportedField) {
+	if err := Unmarshal(flags, environ, &unexportedStruct); !errors.Is(err, ErrUnexportedField) {
 		t.Errorf("Expected error 'ErrUnexportedField' but got '%s'", err)
 	}
 }
@@ -397,9 +407,10 @@ func TestUnmarshalSlice(t *testing.T) {
 			"SEPARATOR": "1&2", // struct has `separator=&`
 		}
 		iterValStruct IterValuesStruct
+		flags         = flag.NewFlagSet(testEnvFlagSetName, flag.ExitOnError)
 	)
 
-	if err := Unmarshal(environ, &iterValStruct); err != nil {
+	if err := Unmarshal(flags, environ, &iterValStruct); err != nil {
 		t.Errorf("Expected no error but got %v", err)
 		return
 	}
@@ -425,9 +436,10 @@ func TestUnmarshalDefaultValues(t *testing.T) {
 	var (
 		environ            = map[string]string{"PRESENT": "youFoundMe"}
 		defaultValueStruct DefaultValueStruct
+		flags              = flag.NewFlagSet(testEnvFlagSetName, flag.ExitOnError)
 	)
 
-	if err := Unmarshal(environ, &defaultValueStruct); err != nil {
+	if err := Unmarshal(flags, environ, &defaultValueStruct); err != nil {
 		t.Errorf("Expected no error but got %s", err)
 	}
 
@@ -458,10 +470,11 @@ func TestUnmarshalRequiredValues(t *testing.T) {
 	var (
 		environ              = make(map[string]string)
 		requiredValuesStruct RequiredValueStruct
+		flags                = flag.NewFlagSet(testEnvFlagSetName, flag.ExitOnError)
 	)
 
 	// Try missing REQUIRED_VAL and REQUIRED_VAL_MORE
-	err := Unmarshal(environ, &requiredValuesStruct)
+	err := Unmarshal(flags, environ, &requiredValuesStruct)
 	if err == nil {
 		t.Errorf("Expected error 'ErrMissingRequiredValue' but got '%s'", err)
 	}
@@ -472,7 +485,7 @@ func TestUnmarshalRequiredValues(t *testing.T) {
 
 	// Fill REQUIRED_VAL and retry REQUIRED_VAL_MORE
 	environ["REQUIRED_VAL"] = "required"
-	err = Unmarshal(environ, &requiredValuesStruct)
+	err = Unmarshal(flags, environ, &requiredValuesStruct)
 	if err == nil {
 		t.Errorf("Expected error 'ErrMissingRequiredValue' but got '%s'", err)
 	}
@@ -482,7 +495,7 @@ func TestUnmarshalRequiredValues(t *testing.T) {
 	}
 
 	environ["REQUIRED_VAL_MORE"] = "required"
-	if err = Unmarshal(environ, &requiredValuesStruct); err != nil {
+	if err = Unmarshal(flags, environ, &requiredValuesStruct); err != nil {
 		t.Errorf("Expected no error but got '%s'", err)
 	}
 	if requiredValuesStruct.Required != "required" {

@@ -1,4 +1,5 @@
 // Copyright 2018 Netflix, Inc.
+// Copyright 2025 TubbyStubby.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +19,7 @@ package env
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"reflect"
@@ -35,6 +37,12 @@ const (
 	// tagKeySeparator is the key used in the struct field tag to specify a
 	// separator for slice fields
 	tagKeySeparator = "separator"
+	// tagKeyFlag is the key used in the struct field tag to specify a different
+	// name for the env flag
+	tagKeyFlag = "flag"
+	// tagKeyDesc is the key used in the struct field tag to specify a description
+	// note: this only comes with flag help
+	tagKeyDesc = "desc"
 )
 
 var (
@@ -74,7 +82,7 @@ func (e ErrMissingRequiredValue) Error() string {
 //
 // If the field has a type that is unsupported, Unmarshal returns
 // ErrUnsupportedType.
-func Unmarshal(es EnvSet, v interface{}) error {
+func Unmarshal(flags *flag.FlagSet, es EnvSet, v interface{}) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return ErrInvalidValue
@@ -92,7 +100,7 @@ func Unmarshal(es EnvSet, v interface{}) error {
 			if !valueField.Addr().CanInterface() {
 				continue
 			}
-			if err := Unmarshal(es, valueField.Addr().Interface()); err != nil {
+			if err := Unmarshal(flags, es, valueField.Addr().Interface()); err != nil {
 				return err
 			}
 		}
@@ -109,14 +117,37 @@ func Unmarshal(es EnvSet, v interface{}) error {
 
 		envTag := parseTag(tag)
 
-		var (
-			envValue string
-			ok       bool
-		)
-		for _, envKey := range envTag.Keys {
-			envValue, ok = es[envKey]
+		var envValue string
+		var ok bool
+
+		// check if any flags are set, either the flag tag or the key flags
+		flagName := envTag.Flag
+		if flagName != "" {
+			ok = isFlagSet(flags, flagName)
 			if ok {
-				break
+				f := flags.Lookup(flagName)
+				envValue = f.Value.String()
+			}
+		}
+		if !ok {
+			for _, envKey := range envTag.Keys {
+				flagName = toFlagName(envKey)
+				ok = isFlagSet(flags, flagName)
+				if ok {
+					f := flags.Lookup(flagName)
+					envValue = f.Value.String()
+					break
+				}
+			}
+		}
+
+		// if flag not set then check the env vars
+		if !ok {
+			for _, envKey := range envTag.Keys {
+				envValue, ok = es[envKey]
+				if ok {
+					break
+				}
 			}
 		}
 
@@ -256,13 +287,24 @@ func set(t reflect.Type, f reflect.Value, value, sliceSeparator string) error {
 //
 // If the field has a type that is unsupported, UnmarshalFromEnviron returns
 // ErrUnsupportedType.
-func UnmarshalFromEnviron(v interface{}) (EnvSet, error) {
-	es, err := EnvironToEnvSet(os.Environ())
+func UnmarshalFromEnviron(v interface{}) (*flag.FlagSet, EnvSet, error) {
+	flags, err := RegisterFlags(v)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return es, Unmarshal(es, v)
+	filteredArgs := filterUndefinedAndDups(flags, os.Args[1:])
+	err = flags.Parse(filteredArgs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	es, err := EnvironToEnvSet(os.Environ())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return flags, es, Unmarshal(flags, es, v)
 }
 
 // Marshal returns an EnvSet of v. If v is nil or not a pointer, Marshal returns
@@ -337,7 +379,7 @@ func Marshal(v interface{}) (EnvSet, error) {
 			// Skip keys with '=', as they represent tag options and not environment variable names.
 			if strings.Contains(envKey, "=") {
 				switch strings.ToLower(strings.SplitN(envKey, "=", 2)[0]) {
-				case "separator", "required", "default":
+				case "separator", "required", "default", "flag", "desc":
 					continue
 				}
 			}
@@ -358,6 +400,10 @@ type tag struct {
 	Required bool
 	// Separator is used to split the value of a slice field
 	Separator string
+	// Flag is used to provide alternative name for the env flag
+	Flag string
+	// Desc is used to provide a description for the field
+	Desc string
 }
 
 // parseTag is used in the Unmarshal function to parse the "env" field tags
@@ -378,6 +424,10 @@ func parseTag(tagString string) tag {
 			t.Required = strings.ToLower(keyData[1]) == "true"
 		case tagKeySeparator:
 			t.Separator = keyData[1]
+		case tagKeyFlag:
+			t.Flag = keyData[1]
+		case tagKeyDesc:
+			t.Desc = keyData[1]
 		default:
 			// just ignoring unsupported keys
 			continue
