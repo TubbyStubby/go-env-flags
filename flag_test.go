@@ -84,6 +84,32 @@ func TestFlagUnmarshal(t *testing.T) {
 	}
 }
 
+func TestFlagPriority(t *testing.T) {
+	t.Parallel()
+	var (
+		environ     = map[string]string{"HOME": "/home/bad"}
+		args        = []string{"-home=/home/test"}
+		validStruct ValidStruct
+	)
+	flags, err := RegisterFlags(&validStruct)
+	if err != nil {
+		t.Errorf("Expected no error while register but got '%s'", err)
+	}
+
+	filteredArgs := filterUndefinedAndDups(flags, args)
+	if err := flags.Parse(filteredArgs); err != nil {
+		t.Errorf("Expected flag set to parse filtered args but got '%s'", err)
+	}
+
+	if err := Unmarshal(flags, environ, &validStruct); err != nil {
+		t.Errorf("Expected no error but got '%s'", err)
+	}
+
+	if validStruct.Home != "/home/test" {
+		t.Errorf("Expected field value to be '%s' but got '%s'", "/home/test", validStruct.Home)
+	}
+}
+
 func TestFlagUnmarshalPointer(t *testing.T) {
 	t.Parallel()
 	var (
